@@ -66,30 +66,9 @@ import {
 } from '@mui/icons-material';
 import { StatCard } from '@/components';
 import { getMonthOptions, SalarySlipStatus } from '@/types';
-import { mockLabMembers } from '@/services/mockData';
-
-// Generate salary data for each member
-const generateSalaryData = () => {
-  return mockLabMembers.map(member => ({
-    id: member.id,
-    memberId: member.id,
-    memberName: member.name,
-    email: member.email,
-    baseSalary: member.baseSalary,
-    fullDays: Math.floor(Math.random() * 5) + 17,
-    halfDays: Math.floor(Math.random() * 3),
-    lopDays: Math.floor(Math.random() * 2),
-    halfDayDeduction: Math.floor(member.baseSalary / 22 / 2) * Math.floor(Math.random() * 3),
-    lopDeduction: Math.floor(member.baseSalary / 22) * Math.floor(Math.random() * 2),
-    otherDeductions: Math.floor(Math.random() * 500),
-    bonus: Math.random() > 0.7 ? Math.floor(Math.random() * 5000) : 0,
-    status: ['PENDING', 'APPROVED', 'PAID', 'DISPUTED'][Math.floor(Math.random() * 4)] as SalarySlipStatus,
-    generatedAt: new Date(Date.now() - Math.random() * 86400000 * 5).toISOString(),
-    approvedAt: Math.random() > 0.5 ? new Date(Date.now() - Math.random() * 86400000 * 3).toISOString() : undefined,
-    approvedBy: Math.random() > 0.5 ? 'Admin User' : undefined,
-    remarks: '',
-  }));
-};
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { payrollApi } from '@/api/payroll';
+import api from '@/api/axios';
 
 const SalaryManagement: React.FC = () => {
   const currentDate = new Date();
@@ -114,22 +93,51 @@ const SalaryManagement: React.FC = () => {
   });
 
   const monthOptions = getMonthOptions();
-  const salaryData = useMemo(() => generateSalaryData(), []);
+  const queryClient = useQueryClient();
+
+  // Fetch salary slips from API
+  const { data: salarySlips = [], isLoading, refetch } = useQuery({
+    queryKey: ['payroll', selectedYear, selectedMonth],
+    queryFn: async () => {
+      const response = await payrollApi.getAll({
+        year: selectedYear,
+        month: selectedMonth,
+      });
+      return response;
+    },
+  });
 
   // Calculate net salary for each slip
   const processedSalaryData = useMemo(() => {
-    return salaryData.map(slip => ({
-      ...slip,
-      totalDeductions: slip.halfDayDeduction + slip.lopDeduction + slip.otherDeductions,
-      netSalary: slip.baseSalary - slip.halfDayDeduction - slip.lopDeduction - slip.otherDeductions + slip.bonus,
-    }));
-  }, [salaryData]);
+    return salarySlips.map((slip: any) => {
+      const baseSalary = slip.baseSalary || 0;
+      const bonus = slip.bonus || 0;
+      const halfDayDeduction = slip.halfDayDeduction || 0;
+      const lopDeduction = slip.lopDeduction || 0;
+      const otherDeductions = slip.otherDeductions || 0;
+      const totalDeductions = halfDayDeduction + lopDeduction + otherDeductions;
+      const netSalary = slip.netSalary || (baseSalary - totalDeductions + bonus);
+      
+      return {
+        ...slip,
+        baseSalary,
+        bonus,
+        halfDayDeduction,
+        lopDeduction,
+        otherDeductions,
+        totalDeductions,
+        netSalary,
+      };
+    });
+  }, [salarySlips]);
 
   // Filter salary slips
   const filteredSlips = useMemo(() => {
-    return processedSalaryData.filter(slip => {
-      const matchesSearch = slip.memberName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           slip.email.toLowerCase().includes(searchQuery.toLowerCase());
+    return processedSalaryData.filter((slip: any) => {
+      const memberName = slip.memberName || slip.user?.name || '';
+      const email = slip.email || slip.user?.email || '';
+      const matchesSearch = memberName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                           email.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesStatus = statusFilter === 'all' || slip.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
@@ -137,14 +145,12 @@ const SalaryManagement: React.FC = () => {
 
   // Statistics
   const stats = useMemo(() => {
-    const total = processedSalaryData.reduce((acc, s) => acc + s.netSalary, 0);
-    const approved = processedSalaryData.filter(s => s.status === 'APPROVED' || s.status === 'PAID').length;
-    const pending = processedSalaryData.filter(s => s.status === 'PENDING').length;
-    const disputed = processedSalaryData.filter(s => s.status === 'DISPUTED').length;
+    const total = processedSalaryData.reduce((acc: number, s: any) => acc + (s.netSalary || 0), 0);
+    const approved = processedSalaryData.filter((s: any) => s.status === 'APPROVED' || s.status === 'PAID').length;
+    const pending = processedSalaryData.filter((s: any) => s.status === 'PENDING').length;
+    const disputed = processedSalaryData.filter((s: any) => s.status === 'DISPUTED').length;
     return { total, approved, pending, disputed };
   }, [processedSalaryData]);
-
-  const isLoading = false;
 
   const handleMonthChange = (value: string) => {
     const [year, month] = value.split('-').map(Number);
@@ -696,7 +702,10 @@ const SalaryManagement: React.FC = () => {
           <Tooltip title="Refresh">
             <IconButton 
               sx={{ bgcolor: 'background.paper', boxShadow: 1 }}
-              onClick={() => setSnackbar({ open: true, message: 'Data refreshed', severity: 'info' })}
+              onClick={() => {
+                refetch();
+                setSnackbar({ open: true, message: 'Data refreshed', severity: 'info' });
+              }}
             >
               <RefreshIcon />
             </IconButton>

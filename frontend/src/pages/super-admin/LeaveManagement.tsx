@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Box,
   Typography,
@@ -21,12 +22,21 @@ import {
 } from '@mui/icons-material';
 import { DataTable, Column } from '@/components';
 import { LeaveApplication, LeaveApplicationStatus } from '@/types';
-import { mockLeaveApplications } from '@/services/mockData';
+import { leaveApi } from '@/api/leave';
 
 const LeaveManagement: React.FC = () => {
-  const [leaveApplications, setLeaveApplications] = useState<LeaveApplication[]>(
-    mockLeaveApplications
-  );
+  const queryClient = useQueryClient();
+  
+  // Fetch all leave applications from API
+  const { data: leaveApplications = [], isLoading, refetch } = useQuery({
+    queryKey: ['leave', 'all'],
+    queryFn: async () => {
+      // Use pending endpoint or get all leaves
+      const pending = await leaveApi.getPending();
+      return pending;
+    },
+  });
+  
   const [selectedLeave, setSelectedLeave] = useState<LeaveApplication | null>(null);
   const [actionDialog, setActionDialog] = useState<{
     open: boolean;
@@ -35,7 +45,32 @@ const LeaveManagement: React.FC = () => {
   const [rejectionReason, setRejectionReason] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  const isLoading = false;
+  // Approve leave mutation
+  const approveMutation = useMutation({
+    mutationFn: (data: { id: string; comments?: string }) => 
+      leaveApi.approve(data.id, data.comments),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leave'] });
+      setSuccessMessage('Leave application approved successfully!');
+      setActionDialog({ open: false, action: null });
+      setSelectedLeave(null);
+      setTimeout(() => setSuccessMessage(''), 3000);
+    },
+  });
+
+  // Reject leave mutation
+  const rejectMutation = useMutation({
+    mutationFn: (data: { id: string; comments: string }) => 
+      leaveApi.reject(data.id, data.comments),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leave'] });
+      setSuccessMessage('Leave application rejected.');
+      setActionDialog({ open: false, action: null });
+      setSelectedLeave(null);
+      setRejectionReason('');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    },
+  });
 
   const getStatusColor = (status: LeaveApplicationStatus) => {
     switch (status) {
@@ -74,47 +109,23 @@ const LeaveManagement: React.FC = () => {
 
   const handleApprove = () => {
     if (selectedLeave) {
-      const updatedLeaves = leaveApplications.map((leave) =>
-        leave.id === selectedLeave.id
-          ? {
-              ...leave,
-              status: 'APPROVED' as LeaveApplicationStatus,
-              approvedBy: 3,
-              approvedByName: 'Admin User',
-              approvalDate: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            }
-          : leave
-      );
-      setLeaveApplications(updatedLeaves);
-      setActionDialog({ open: false, action: null });
-      setSelectedLeave(null);
-      setSuccessMessage(`Leave application approved for ${selectedLeave.labMemberName}`);
-      setTimeout(() => setSuccessMessage(''), 3000);
+      approveMutation.mutate({
+        id: selectedLeave.id.toString(),
+        comments: 'Approved by Super Admin',
+      });
     }
   };
 
   const handleReject = () => {
-    if (selectedLeave && rejectionReason.trim()) {
-      const updatedLeaves = leaveApplications.map((leave) =>
-        leave.id === selectedLeave.id
-          ? {
-              ...leave,
-              status: 'REJECTED' as LeaveApplicationStatus,
-              rejectionReason,
-              approvedBy: 3,
-              approvedByName: 'Admin User',
-              approvalDate: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            }
-          : leave
-      );
-      setLeaveApplications(updatedLeaves);
-      setActionDialog({ open: false, action: null });
-      setSelectedLeave(null);
-      setRejectionReason('');
-      setSuccessMessage(`Leave application rejected for ${selectedLeave.labMemberName}`);
-      setTimeout(() => setSuccessMessage(''), 3000);
+    if (!rejectionReason.trim()) {
+      alert('Please provide a reason for rejection');
+      return;
+    }
+    if (selectedLeave) {
+      rejectMutation.mutate({
+        id: selectedLeave.id.toString(),
+        comments: rejectionReason,
+      });
     }
   };
 
@@ -261,7 +272,7 @@ const LeaveManagement: React.FC = () => {
           </Typography>
         </Box>
         <Tooltip title="Refresh">
-          <IconButton>
+          <IconButton onClick={() => refetch()}>
             <RefreshIcon />
           </IconButton>
         </Tooltip>

@@ -33,7 +33,11 @@ import {
   Schedule as ScheduleIcon,
   Group as GroupIcon,
 } from '@mui/icons-material';
+// TODO: Backend API for shifts and roster not yet implemented - using mock data
 import { mockShifts, mockRosterAssignments } from '@/services/mockData';
+
+// NOTE: This page uses mock data because the backend shift/roster API endpoints don't exist yet.
+// Once the backend implements /api/shifts and /api/roster endpoints, update this to use real API calls.
 
 interface TabPanelProps {
   children?: React.ReactNode;

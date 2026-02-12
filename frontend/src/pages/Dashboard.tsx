@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -89,7 +89,7 @@ const LabMemberDashboard: React.FC = () => {
 
   // Fetch salary slips
   const {
-    data: salarySlips = [],
+    data: salarySlipsRaw = [],
     isLoading: salaryLoading,
     refetch: refetchSalary
   } = useQuery({
@@ -99,6 +99,19 @@ const LabMemberDashboard: React.FC = () => {
       return response.data;
     }
   });
+
+  // Transform salary data to match frontend expectations
+  const salarySlips = useMemo(() => {
+    return salarySlipsRaw.map((slip: any) => ({
+      ...slip,
+      baseSalary: slip.baseSalary || 0,
+      netSalary: slip.netSalary || 0,
+      totalDeductions: slip.deductions || 0,
+      daysWorked: slip.presentDays || 0,
+      totalWorkingDays: slip.workingDays || 0,
+      status: slip.paymentStatus || 'DRAFT',
+    }));
+  }, [salarySlipsRaw]);
 
   const handleRefresh = () => {
     refetchAttendance();
@@ -361,7 +374,7 @@ const LabMemberDashboard: React.FC = () => {
                   <Box>
                     <Box sx={{ textAlign: 'center', mb: 3 }}>
                       <Typography variant="h3" fontWeight={700} color="primary.main">
-                        ₹{lastSalary.netSalary.toLocaleString('en-IN')}
+                        ₹{(lastSalary.netSalary || 0).toLocaleString('en-IN')}
                       </Typography>
                       <Chip
                         label={lastSalary.status}
@@ -375,20 +388,20 @@ const LabMemberDashboard: React.FC = () => {
 
                     <List dense disablePadding>
                       <ListItem sx={{ px: 0 }}>
-                        <ListItemText primary="Base Salary" secondary={`₹${lastSalary.baseSalary.toLocaleString('en-IN')}`} />
+                        <ListItemText primary="Base Salary" secondary={`₹${(lastSalary.baseSalary || 0).toLocaleString('en-IN')}`} />
                       </ListItem>
                       <ListItem sx={{ px: 0 }}>
                         <ListItemText
                           primary="Deductions"
                           secondary={
                             <Typography variant="body2" color="error.main">
-                              -₹{lastSalary.totalDeductions.toLocaleString('en-IN')}
+                              -₹{(lastSalary.totalDeductions || 0).toLocaleString('en-IN')}
                             </Typography>
                           }
                         />
                       </ListItem>
                       <ListItem sx={{ px: 0 }}>
-                        <ListItemText primary="Days Worked" secondary={`${lastSalary.daysWorked} / ${lastSalary.totalWorkingDays}`} />
+                        <ListItemText primary="Days Worked" secondary={`${lastSalary.daysWorked || 0} / ${lastSalary.totalWorkingDays || 0}`} />
                       </ListItem>
                     </List>
 

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Box,
   Grid,
@@ -46,7 +47,9 @@ import {
   Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import { exportToPDF, exportToCSV } from '@/utils/exportUtils';
-import { mockLabMembers } from '@/services/mockData';
+import { usersApi } from '@/api/users';
+import { attendanceApi } from '@/api/attendance';
+import { payrollApi } from '@/api/payroll';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -75,6 +78,36 @@ const SuperAdminReports: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
 
+  // Fetch real members data
+  const { data: members = [], isLoading: membersLoading } = useQuery({
+    queryKey: ['users', 'all'],
+    queryFn: usersApi.getAll,
+  });
+
+  // Fetch attendance data for reports
+  const { data: attendanceData = [], isLoading: attendanceLoading } = useQuery({
+    queryKey: ['attendance', 'report', selectedYear, selectedMonth],
+    queryFn: async () => {
+      const response = await attendanceApi.getAll({
+        year: selectedYear,
+        month: selectedMonth,
+      });
+      return response;
+    },
+  });
+
+  // Fetch payroll data for reports
+  const { data: payrollData = [], isLoading: payrollLoading } = useQuery({
+    queryKey: ['payroll', 'report', selectedYear, selectedMonth],
+    queryFn: async () => {
+      const response = await payrollApi.getAll({
+        year: selectedYear,
+        month: selectedMonth,
+      });
+      return response;
+    },
+  });
+
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
   };
@@ -82,15 +115,22 @@ const SuperAdminReports: React.FC = () => {
   const handleDownloadAttendanceReport = async (format: 'pdf' | 'csv') => {
     setIsGenerating(true);
     try {
-      const data = mockLabMembers.map(member => ({
-        'Member ID': member.id,
-        'Name': member.name,
-        'Lab': `Lab ${member.labId}`,
-        'Present': Math.floor(Math.random() * 20) + 10,
-        'Absent': Math.floor(Math.random() * 3),
-        'Leave': Math.floor(Math.random() * 5),
-        'Percentage': (Math.random() * 20 + 80).toFixed(2) + '%',
-      }));
+      // Use real attendance data
+      const data = members.map(member => {
+        const memberAttendance = attendanceData.filter((a: any) => a.userId === member.id);
+        const presentDays = memberAttendance.filter((a: any) => a.status === 'PRESENT' || a.status === 'FULL').length;
+        const totalDays = memberAttendance.length || 1;
+        const percentage = ((presentDays / totalDays) * 100).toFixed(2);
+        
+        return {
+          'Member ID': member.employeeId || member.id,
+          'Name': member.name,
+          'Email': member.email,
+          'Present': presentDays,
+          'Total Days': totalDays,
+          'Percentage': percentage + '%',
+        };
+      });
 
       if (format === 'pdf') {
         await exportToPDF(

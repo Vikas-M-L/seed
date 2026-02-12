@@ -1,4 +1,5 @@
 import React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Box,
   Typography,
@@ -16,12 +17,23 @@ import {
 } from '@mui/icons-material';
 import { DataTable, Column } from '@/components';
 import { Lab, LabStatus } from '@/types';
-import { mockLabs } from '@/services/mockData';
+import api from '@/api/axios';
 
 const LabsManagement: React.FC = () => {
-  // Use mock data instead of API
-  const labs = mockLabs;
-  const isLoading = false;
+  // Fetch labs from API (using generic API call since labs API doesn't exist yet)
+  const { data: labs = [], isLoading, refetch } = useQuery({
+    queryKey: ['labs'],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/labs');
+        return response.data;
+      } catch (error) {
+        // If labs endpoint doesn't exist, return empty array
+        console.warn('Labs API not available yet');
+        return [];
+      }
+    },
+  });
 
   const getStatusColor = (status: LabStatus) => {
     return status === 'ACTIVE' ? 'success' : 'default';
@@ -134,7 +146,7 @@ const LabsManagement: React.FC = () => {
             Add Lab
           </Button>
           <Tooltip title="Refresh">
-            <IconButton sx={{ bgcolor: 'background.paper', boxShadow: 1 }}>
+            <IconButton sx={{ bgcolor: 'background.paper', boxShadow: 1 }} onClick={() => refetch()}>
               <RefreshIcon />
             </IconButton>
           </Tooltip>

@@ -37,8 +37,12 @@ import {
   AccessTime as AccessTimeIcon,
   Cancel as CancelIcon,
 } from '@mui/icons-material';
+// TODO: Backend API for overtime not yet implemented - using mock data
 import { mockOvertimeRequests, mockWorkHours } from '@/services/mockData';
 import { OvertimeRequest } from '@/types';
+
+// NOTE: This page uses mock data because the backend overtime API endpoints don't exist yet.
+// Once the backend implements /api/overtime endpoints, update this to use real API calls.
 
 const OvertimeAndWorkHours: React.FC = () => {
   const theme = useTheme();

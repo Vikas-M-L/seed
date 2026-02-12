@@ -39,8 +39,13 @@ import {
   Assessment as AssessmentIcon,
   TrendingUp as TrendingUpIcon,
 } from '@mui/icons-material';
+// TODO: Backend API for deductions not yet implemented - using mock data
 import { mockDeductions, mockPayrollSummary, mockSalarySlips } from '@/services/mockData';
 import { exportToPDF, exportSalarySlipToPDF } from '@/utils/exportUtils';
+
+// NOTE: This page uses mock data because the backend deductions API endpoints don't exist yet.
+// The payroll API exists at /api/payroll but deductions management is not implemented.
+// Once backend implements /api/payroll/deductions endpoints, update this to use real API calls.
 
 interface TabPanelProps {
   children?: React.ReactNode;

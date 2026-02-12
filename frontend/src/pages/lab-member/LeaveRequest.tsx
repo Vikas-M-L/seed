@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Box,
   Typography,
@@ -34,7 +35,7 @@ import {
 } from '@mui/icons-material';
 import { useAuthStore } from '@/stores/authStore';
 import { LeaveApplication, LeaveApplicationStatus, LeaveType } from '@/types';
-import { mockLeaveApplications } from '@/services/mockData';
+import { leaveApi } from '@/api/leave';
 
 interface LeaveFormData {
   leaveType: LeaveType;
@@ -45,9 +46,7 @@ interface LeaveFormData {
 
 const LeaveRequest: React.FC = () => {
   const { user } = useAuthStore();
-  const [myApplications, setMyApplications] = useState<LeaveApplication[]>(
-    mockLeaveApplications.filter((app) => app.labMemberId === user?.id)
-  );
+  const queryClient = useQueryClient();
   const [openDialog, setOpenDialog] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [successMessage, setSuccessMessage] = useState('');
@@ -56,6 +55,31 @@ const LeaveRequest: React.FC = () => {
     startDate: '',
     endDate: '',
     reason: '',
+  });
+
+  // Fetch leave applications from API
+  const { data: myApplications = [], isLoading, refetch } = useQuery({
+    queryKey: ['leave', 'my-applications'],
+    queryFn: leaveApi.getMyApplications,
+  });
+
+  // Apply leave mutation
+  const applyMutation = useMutation({
+    mutationFn: leaveApi.apply,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leave', 'my-applications'] });
+      setSuccessMessage('Leave application submitted successfully!');
+      handleCloseDialog();
+    },
+  });
+
+  // Cancel leave mutation
+  const cancelMutation = useMutation({
+    mutationFn: leaveApi.cancel,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leave', 'my-applications'] });
+      setSuccessMessage('Leave application cancelled successfully!');
+    },
   });
 
   const leaveTypes: LeaveType[] = ['CASUAL', 'MEDICAL', 'EARNED', 'UNPAID', 'MATERNITY', 'PATERNITY'];
@@ -147,81 +171,31 @@ const LeaveRequest: React.FC = () => {
       return;
     }
 
-    const numberOfDays = calculateDays(formData.startDate, formData.endDate);
-
-    if (editingId) {
-      // Update existing application
-      const updatedApps = myApplications.map((app) =>
-        app.id === editingId
-          ? {
-              ...app,
-              leaveType: formData.leaveType,
-              startDate: formData.startDate,
-              endDate: formData.endDate,
-              numberOfDays,
-              reason: formData.reason,
-              updatedAt: new Date().toISOString(),
-            }
-          : app
-      );
-      setMyApplications(updatedApps);
-      setSuccessMessage('Leave application updated successfully');
-    } else {
-      // Create new application
-      const newApplication: LeaveApplication = {
-        id: Math.max(...myApplications.map((a) => a.id), 0) + 1,
-        labMemberId: user?.id || 0,
-        labMemberName: user?.name || '',
-        labMemberEmail: user?.email || '',
-        labId: user?.labId || 0,
-        labName: user?.labName || '',
-        leaveType: formData.leaveType,
-        startDate: formData.startDate,
-        endDate: formData.endDate,
-        numberOfDays,
-        reason: formData.reason,
-        status: 'PENDING',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      setMyApplications([...myApplications, newApplication]);
-      setSuccessMessage('Leave application submitted successfully');
-    }
-
-    setTimeout(() => setSuccessMessage(''), 3000);
-    handleCloseDialog();
+    // Apply leave using API
+    applyMutation.mutate({
+      fromDate: formData.startDate,
+      toDate: formData.endDate,
+      reason: formData.reason,
+    });
   };
 
   const handleCancel = (applicationId: number) => {
-    const app = myApplications.find((a) => a.id === applicationId);
+    const app = myApplications.find((a: any) => a.id === applicationId);
     if (app && app.status === 'PENDING') {
-      const updated = myApplications.map((a) =>
-        a.id === applicationId
-          ? {
-              ...a,
-              status: 'CANCELLED' as LeaveApplicationStatus,
-              updatedAt: new Date().toISOString(),
-            }
-          : a
-      );
-      setMyApplications(updated);
-      setSuccessMessage('Leave application cancelled');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      cancelMutation.mutate(applicationId.toString());
     }
   };
 
   const handleDelete = (applicationId: number) => {
-    const app = myApplications.find((a) => a.id === applicationId);
+    const app = myApplications.find((a: any) => a.id === applicationId);
     if (app && app.status === 'PENDING') {
-      setMyApplications(myApplications.filter((a) => a.id !== applicationId));
-      setSuccessMessage('Leave application deleted');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      cancelMutation.mutate(applicationId.toString());
     }
   };
 
-  const pendingCount = myApplications.filter((a) => a.status === 'PENDING').length;
-  const approvedCount = myApplications.filter((a) => a.status === 'APPROVED').length;
-  const rejectedCount = myApplications.filter((a) => a.status === 'REJECTED').length;
+  const pendingCount = myApplications.filter((a: any) => a.status === 'PENDING').length;
+  const approvedCount = myApplications.filter((a: any) => a.status === 'APPROVED').length;
+  const rejectedCount = myApplications.filter((a: any) => a.status === 'REJECTED').length;
 
   return (
     <Box>
@@ -237,7 +211,7 @@ const LeaveRequest: React.FC = () => {
         </Box>
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Tooltip title="Refresh">
-            <IconButton>
+            <IconButton onClick={() => refetch()}>
               <RefreshIcon />
             </IconButton>
           </Tooltip>

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Announcement, CreateAnnouncementRequest, UpdateAnnouncementRequest } from '@/types';
-import { mockAnnouncements } from '@/services/mockData';
+import { announcementsApi } from '@/api/announcements';
 
 interface AnnouncementState {
   announcements: Announcement[];
@@ -18,12 +18,10 @@ interface AnnouncementState {
   setSelectedAnnouncement: (announcement: Announcement | null) => void;
 }
 
-let announcementIdCounter = 5;
-
 export const useAnnouncementStore = create<AnnouncementState>()(
   persist(
     (set, get) => ({
-      announcements: mockAnnouncements,
+      announcements: [],
       selectedAnnouncement: null,
       isLoading: false,
       error: null,
@@ -31,16 +29,17 @@ export const useAnnouncementStore = create<AnnouncementState>()(
       fetchAnnouncements: async () => {
         set({ isLoading: true, error: null });
         try {
-          // Simulate API call
-          await new Promise((resolve) => setTimeout(resolve, 500));
+          // Fetch from real API
+          const announcements = await announcementsApi.getAll();
           
           // Filter active announcements
-          const activeAnnouncements = get().announcements.filter(
-            (a) => a.status === 'ACTIVE' && (!a.expiresAt || new Date(a.expiresAt) > new Date())
+          const activeAnnouncements = announcements.filter(
+            (a: Announcement) => a.status === 'ACTIVE' && (!a.expiresAt || new Date(a.expiresAt) > new Date())
           );
           
           set({ announcements: activeAnnouncements, isLoading: false });
         } catch (error) {
+          console.error('Failed to fetch announcements:', error);
           set({ error: 'Failed to fetch announcements', isLoading: false });
         }
       },
@@ -57,22 +56,18 @@ export const useAnnouncementStore = create<AnnouncementState>()(
       ) => {
         set({ isLoading: true, error: null });
         try {
-          const newAnnouncement: Announcement = {
-            id: announcementIdCounter++,
-            ...data,
-            createdBy,
-            createdByName,
-            createdByRole,
-            status: 'ACTIVE',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
+          const newAnnouncement = await announcementsApi.create({
+            title: data.title,
+            content: data.description || data.content,
+            priority: data.priority,
+          });
 
           set((state) => ({
             announcements: [newAnnouncement, ...state.announcements],
             isLoading: false,
           }));
         } catch (error) {
+          console.error('Failed to create announcement:', error);
           set({ error: 'Failed to create announcement', isLoading: false });
         }
       },
@@ -80,19 +75,16 @@ export const useAnnouncementStore = create<AnnouncementState>()(
       updateAnnouncement: async (id: number, data: UpdateAnnouncementRequest) => {
         set({ isLoading: true, error: null });
         try {
+          const updatedAnnouncement = await announcementsApi.update(id.toString(), data);
+          
           set((state) => ({
             announcements: state.announcements.map((a) =>
-              a.id === id
-                ? {
-                    ...a,
-                    ...data,
-                    updatedAt: new Date().toISOString(),
-                  }
-                : a
+              a.id === id ? updatedAnnouncement : a
             ),
             isLoading: false,
           }));
         } catch (error) {
+          console.error('Failed to update announcement:', error);
           set({ error: 'Failed to update announcement', isLoading: false });
         }
       },
@@ -100,11 +92,14 @@ export const useAnnouncementStore = create<AnnouncementState>()(
       deleteAnnouncement: async (id: number) => {
         set({ isLoading: true, error: null });
         try {
+          await announcementsApi.delete(id.toString());
+          
           set((state) => ({
             announcements: state.announcements.filter((a) => a.id !== id),
             isLoading: false,
           }));
         } catch (error) {
+          console.error('Failed to delete announcement:', error);
           set({ error: 'Failed to delete announcement', isLoading: false });
         }
       },
